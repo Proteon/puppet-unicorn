@@ -1,0 +1,139 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          unicorn
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Manage unicorn server
+# Description:       Start, stop, restart unicorn server for a specific application.
+### END INIT INFO
+
+PATH=/bin:/usr/bin:/usr/sbin
+
+# only root should run this one since we want to implement user-per-unicorn
+if [ "$EUID" -ne 0 ]; then
+        echo "Only root should run this script. sorry"
+        exit 1
+fi
+
+args='start|stop|restart|status --instance=<instance>'
+case $1 in
+        --help)
+        echo "Usage: $0 {${args}}"
+        exit 1
+;;
+esac
+
+# functions
+info() { 
+        echo -ne '\E[0;32m'"\033[1mINFO\033[0m "
+        echo ${1}
+}
+die() {
+        echo -ne '\E[32;31m'"\033[1mERR\033[0m "
+        echo ${1}
+        exit 1
+}
+warn() {
+        echo -ne '\E[32;33m'"\033[1mWARN\033[0m "
+        echo ${1}
+}
+
+start() {
+	PID=`ps ax | grep "unicorn master -Dc" | grep /etc/unicorn.d/$unicorn | awk '{printf $1}'`
+    if [ "$PID" != "" ]; then   
+		info "Already running Unicorn [$unicorn] @ PID: $PID ..."
+    else
+        info "Starting Unicorn [$unicorn]"  
+        /usr/local/bin/unicorn -Dc /etc/unicorn.d/$unicorn
+    status
+    fi
+}
+stop() {
+	PID=`ps ax | grep "unicorn master -Dc" | grep /etc/unicorn.d/$unicorn | awk '{printf $1}'`
+	if [ "$PID" != "" ]; then
+		info "Stopping Unicorn [$unicorn] @ PID: $PID "
+        kill $PID
+        sleep 2
+        PID=`ps ax | grep "unicorn master -Dc" | grep /etc/unicorn.d/$unicorn | awk '{printf $1}'`
+        if [ "$PID" != "" ]; then
+                info "Unicorn [$unicorn] doesn't seem to stop fast enough, killing it"
+                kill -9 $PID
+        fi
+        info "Unicorn [$unicorn] stopped"
+	else
+        warn "Unicorn [$unicorn] not running"
+	fi
+}
+status() {
+	PID=`ps ax | grep "unicorn master -Dc" | grep /etc/unicorn.d/$unicorn | awk '{printf $1}'`
+    if [ "$PID" != "" ]; then
+    	info "Unicorn [$unicorn] running @ PID: $PID"
+    else
+    	info "Unicorn [$unicorn] not running!"
+    fi
+}
+
+if [ -z "/etc/unicorn.d" ]; then
+        die "includedir unknown. $errmsg"
+        else
+        # guess instance names
+        unicorns=$( ls -1Ap /etc/unicorn.d/ | grep -v /\$ )
+        if [ "${i#unicorns[@]}" == "0" ]; then
+                die "no config files found in $includedir. sorry"
+        fi
+fi
+
+case $1 in
+        start)
+        if [[  "${2}" =~ "--instance=" ]]; then
+                unicorn="${2}"
+                unicorn="${unicorn##--instance=}"
+                start
+        else
+        	for unicorn in ${unicorns}; do
+            	start
+            done
+        fi
+;;
+    stop)
+        if [[  "${2}" =~ "--instance=" ]]; then
+                unicorn="${2}"
+                unicorn="${unicorn##--instance=}"
+                stop     
+        else
+                for unicorn in ${unicorns}; do
+                        stop
+                done
+        fi
+;;
+        restart)
+              if [[  "${2}" =~ "--instance=" ]]; then
+                unicorn="${2}"
+                unicorn="${unicorn##--instance=}"
+                stop
+                start
+        else              
+                for unicorn in ${unicorns}; do
+                        stop
+                        start
+                done
+        fi
+;;
+        status)
+        if [[  "${2}" =~ "--instance=" ]]; then
+                unicorn="${2}"
+                unicorn="${unicorn##--instance=}"
+                status
+        else                
+                for unicorn in ${unicorns}; do
+                        status
+                done
+        fi
+;;
+        *)
+        $0 --help
+;;
+esac
+exit 0
