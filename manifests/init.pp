@@ -26,4 +26,10 @@ class unicorn {
     owner  => 'root',
     group  => 'root',
   }
+
+  exec { '/usr/sbin/update-rc.d unicorn defaults':
+    command => '/usr/sbin/update-rc.d unicorn defaults',
+    unless  => '/usr/sbin/update-rc.d unicorn defaults |grep \'already exist\'',
+    require => File['/etc/init.d/unicorn'],
+  }
 }
